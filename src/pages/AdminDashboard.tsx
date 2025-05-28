@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,22 +22,13 @@ import {
   Ban,
   Search
 } from "lucide-react";
-import { format } from "date-fns";
-
-interface Capsule {
-  id: number;
-  type: string;
-  content: string;
-  unlockDate: Date;
-  isPrivate: boolean;
-  createdAt: Date;
-  isLocked: boolean;
-  userEmail: string;
-  status: "active" | "flagged" | "banned";
-}
+import { format, isAfter } from "date-fns";
+import { useCapsules } from "@/hooks/useCapsules";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 const AdminDashboard = () => {
-  const [capsules, setCapsules] = useState<Capsule[]>([]);
+  const { data: capsules = [] } = useCapsules();
   const [filter, setFilter] = useState<"all" | "locked" | "unlocked" | "flagged">("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [adSettings, setAdSettings] = useState({
@@ -46,83 +37,40 @@ const AdminDashboard = () => {
     placement: "bottom"
   });
 
-  useEffect(() => {
-    // Mock data for demonstration
-    const mockCapsules: Capsule[] = [
-      {
-        id: 1,
-        type: "text",
-        content: "Dear future me, I hope you remember this beautiful sunset...",
-        unlockDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        isPrivate: false,
-        createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-        isLocked: true,
-        userEmail: "user1@example.com",
-        status: "active"
-      },
-      {
-        id: 2,
-        type: "image",
-        content: "data:image/placeholder",
-        unlockDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-        isPrivate: true,
-        createdAt: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
-        isLocked: false,
-        userEmail: "user2@example.com",
-        status: "active"
-      },
-      {
-        id: 3,
-        type: "text",
-        content: "Inappropriate content example...",
-        unlockDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
-        isPrivate: false,
-        createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-        isLocked: true,
-        userEmail: "user3@example.com",
-        status: "flagged"
-      }
-    ];
-    setCapsules(mockCapsules);
-  }, []);
+  // Get user count
+  const { data: userStats } = useQuery({
+    queryKey: ['admin-stats'],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
+      
+      return { userCount: count || 0 };
+    },
+  });
+
+  const isUnlocked = (unlockDate: string) => isAfter(new Date(), new Date(unlockDate));
 
   const filteredCapsules = capsules.filter((capsule) => {
     const matchesFilter = 
       filter === "all" || 
-      (filter === "locked" && capsule.isLocked) ||
-      (filter === "unlocked" && !capsule.isLocked) ||
-      (filter === "flagged" && capsule.status === "flagged");
+      (filter === "locked" && !isUnlocked(capsule.unlock_date)) ||
+      (filter === "unlocked" && isUnlocked(capsule.unlock_date));
     
     const matchesSearch = 
-      capsule.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      capsule.userEmail.toLowerCase().includes(searchTerm.toLowerCase());
+      (capsule.content || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (capsule.title || '').toLowerCase().includes(searchTerm.toLowerCase());
     
     return matchesFilter && matchesSearch;
   });
 
   const stats = {
     totalCapsules: capsules.length,
-    lockedCapsules: capsules.filter(c => c.isLocked).length,
-    unlockedCapsules: capsules.filter(c => !c.isLocked).length,
-    flaggedCapsules: capsules.filter(c => c.status === "flagged").length,
-    publicCapsules: capsules.filter(c => !c.isPrivate).length,
-    privateCapsules: capsules.filter(c => c.isPrivate).length
-  };
-
-  const handleBanCapsule = (id: number) => {
-    setCapsules(prev => prev.map(capsule => 
-      capsule.id === id 
-        ? { ...capsule, status: "banned" as const }
-        : capsule
-    ));
-  };
-
-  const handleUnflagCapsule = (id: number) => {
-    setCapsules(prev => prev.map(capsule => 
-      capsule.id === id 
-        ? { ...capsule, status: "active" as const }
-        : capsule
-    ));
+    lockedCapsules: capsules.filter(c => !isUnlocked(c.unlock_date)).length,
+    unlockedCapsules: capsules.filter(c => isUnlocked(c.unlock_date)).length,
+    flaggedCapsules: 0, // Would need additional field in DB
+    publicCapsules: capsules.filter(c => !c.is_private).length,
+    privateCapsules: capsules.filter(c => c.is_private).length
   };
 
   return (
@@ -201,7 +149,7 @@ const AdminDashboard = () => {
                       <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                       <Input
                         id="search"
-                        placeholder="Search by content or user email..."
+                        placeholder="Search by content or title..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-10"
@@ -230,8 +178,8 @@ const AdminDashboard = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>ID</TableHead>
+                        <TableHead>Title</TableHead>
                         <TableHead>Type</TableHead>
-                        <TableHead>User</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Privacy</TableHead>
                         <TableHead>Created</TableHead>
@@ -240,68 +188,54 @@ const AdminDashboard = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredCapsules.map((capsule) => (
-                        <TableRow key={capsule.id}>
-                          <TableCell className="font-mono">{capsule.id}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{capsule.type}</Badge>
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">{capsule.userEmail}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {capsule.isLocked ? (
-                                <Lock className="w-4 h-4 text-lavender-500" />
-                              ) : (
-                                <Unlock className="w-4 h-4 text-peach-500" />
-                              )}
-                              <Badge 
-                                variant={capsule.status === "flagged" ? "destructive" : "default"}
-                                className={
-                                  capsule.status === "active" ? "bg-green-100 text-green-800" :
-                                  capsule.status === "flagged" ? "bg-red-100 text-red-800" :
-                                  "bg-slate-100 text-slate-800"
-                                }
-                              >
-                                {capsule.status}
-                              </Badge>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={capsule.isPrivate ? "secondary" : "outline"}>
-                              {capsule.isPrivate ? "Private" : "Public"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {format(capsule.createdAt, "MMM dd, yyyy")}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {format(capsule.unlockDate, "MMM dd, yyyy")}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button size="sm" variant="outline">
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                              {capsule.status === "flagged" && (
-                                <Button 
-                                  size="sm" 
-                                  variant="outline"
-                                  onClick={() => handleUnflagCapsule(capsule.id)}
+                      {filteredCapsules.map((capsule) => {
+                        const unlocked = isUnlocked(capsule.unlock_date);
+                        return (
+                          <TableRow key={capsule.id}>
+                            <TableCell className="font-mono text-xs">{capsule.id.slice(0, 8)}...</TableCell>
+                            <TableCell>{capsule.title || 'Untitled'}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{capsule.content_type}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {!unlocked ? (
+                                  <Lock className="w-4 h-4 text-lavender-500" />
+                                ) : (
+                                  <Unlock className="w-4 h-4 text-peach-500" />
+                                )}
+                                <Badge 
+                                  variant="default"
+                                  className="bg-green-100 text-green-800"
                                 >
-                                  <Star className="w-4 h-4" />
+                                  Active
+                                </Badge>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={capsule.is_private ? "secondary" : "outline"}>
+                                {capsule.is_private ? "Private" : "Public"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {format(new Date(capsule.created_at), "MMM dd, yyyy")}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {format(new Date(capsule.unlock_date), "MMM dd, yyyy")}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline">
+                                  <Eye className="w-4 h-4" />
                                 </Button>
-                              )}
-                              <Button 
-                                size="sm" 
-                                variant="destructive"
-                                onClick={() => handleBanCapsule(capsule.id)}
-                              >
-                                <Ban className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                                <Button size="sm" variant="destructive">
+                                  <Ban className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -318,23 +252,22 @@ const AdminDashboard = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-slate-600 mb-4">User management features coming soon...</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Card className="border-lavender-200">
                     <CardContent className="p-4 text-center">
-                      <div className="text-2xl font-bold text-slate-800">245</div>
+                      <div className="text-2xl font-bold text-slate-800">{userStats?.userCount || 0}</div>
                       <div className="text-sm text-slate-600">Total Users</div>
                     </CardContent>
                   </Card>
                   <Card className="border-lavender-200">
                     <CardContent className="p-4 text-center">
-                      <div className="text-2xl font-bold text-green-600">12</div>
+                      <div className="text-2xl font-bold text-green-600">0</div>
                       <div className="text-sm text-slate-600">Premium Users</div>
                     </CardContent>
                   </Card>
                   <Card className="border-lavender-200">
                     <CardContent className="p-4 text-center">
-                      <div className="text-2xl font-bold text-blue-600">89%</div>
+                      <div className="text-2xl font-bold text-blue-600">100%</div>
                       <div className="text-sm text-slate-600">Active Rate</div>
                     </CardContent>
                   </Card>
@@ -352,42 +285,47 @@ const AdminDashboard = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-slate-600 mb-4">Analytics dashboard coming soon...</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Card className="border-lavender-200">
-                    <CardContent className="p-4">
-                      <h3 className="font-semibold mb-2">Popular Unlock Times</h3>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span>1 Month</span>
-                          <span className="text-lavender-600">45%</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>1 Year</span>
-                          <span className="text-skyblue-600">35%</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>5+ Years</span>
-                          <span className="text-peach-600">20%</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
                   <Card className="border-lavender-200">
                     <CardContent className="p-4">
                       <h3 className="font-semibold mb-2">Content Types</h3>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span>Text Messages</span>
-                          <span className="text-lavender-600">60%</span>
+                          <span className="text-lavender-600">
+                            {Math.round((capsules.filter(c => c.content_type === 'text').length / capsules.length) * 100) || 0}%
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span>Photos</span>
-                          <span className="text-skyblue-600">30%</span>
+                          <span className="text-skyblue-600">
+                            {Math.round((capsules.filter(c => c.content_type === 'image').length / capsules.length) * 100) || 0}%
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span>Drawings</span>
-                          <span className="text-peach-600">10%</span>
+                          <span className="text-peach-600">
+                            {Math.round((capsules.filter(c => c.content_type === 'drawing').length / capsules.length) * 100) || 0}%
+                          </span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-lavender-200">
+                    <CardContent className="p-4">
+                      <h3 className="font-semibold mb-2">Privacy Settings</h3>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span>Public Capsules</span>
+                          <span className="text-lavender-600">
+                            {Math.round((stats.publicCapsules / stats.totalCapsules) * 100) || 0}%
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Private Capsules</span>
+                          <span className="text-skyblue-600">
+                            {Math.round((stats.privateCapsules / stats.totalCapsules) * 100) || 0}%
+                          </span>
                         </div>
                       </div>
                     </CardContent>
@@ -485,54 +423,6 @@ const AdminDashboard = () => {
                           </SelectContent>
                         </Select>
                       </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Time Lock Settings */}
-                <div>
-                  <h3 className="font-semibold mb-4">Time Lock Presets</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label>Minimum lock duration</Label>
-                      <Select defaultValue="1day">
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1hour">1 Hour</SelectItem>
-                          <SelectItem value="1day">1 Day</SelectItem>
-                          <SelectItem value="1week">1 Week</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div>
-                      <Label>Maximum lock duration</Label>
-                      <Select defaultValue="50years">
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="10years">10 Years</SelectItem>
-                          <SelectItem value="25years">25 Years</SelectItem>
-                          <SelectItem value="50years">50 Years</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div>
-                      <Label>Default lock duration</Label>
-                      <Select defaultValue="1year">
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1month">1 Month</SelectItem>
-                          <SelectItem value="6months">6 Months</SelectItem>
-                          <SelectItem value="1year">1 Year</SelectItem>
-                        </SelectContent>
-                      </Select>
                     </div>
                   </div>
                 </div>

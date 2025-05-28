@@ -12,7 +12,8 @@ import { format } from "date-fns";
 import { Calendar as CalendarIcon, Lock, Upload, Star, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import DrawingCanvas from "@/components/DrawingCanvas";
-import { useToast } from "@/hooks/use-toast";
+import { useCreateCapsule } from "@/hooks/useCapsules";
+import { supabase } from "@/integrations/supabase/client";
 
 const CreateCapsule = () => {
   const [selectedDate, setSelectedDate] = useState<Date>();
@@ -20,51 +21,66 @@ const CreateCapsule = () => {
   const [message, setMessage] = useState("");
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("text");
-  const { toast } = useToast();
+  const [title, setTitle] = useState("");
+  const createCapsule = useCreateCapsule();
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setUploadedImage(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('capsule-files')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('capsule-files')
+        .getPublicUrl(fileName);
+
+      setUploadedImage(data.publicUrl);
+    } catch (error) {
+      console.error('Error uploading file:', error);
     }
   };
 
   const handleCreateCapsule = () => {
     if (!selectedDate) {
-      toast({
-        title: "Missing unlock date",
-        description: "Please select when you'd like your capsule to unlock.",
-        variant: "destructive",
-      });
       return;
     }
 
-    // Save to localStorage for demo purposes
-    const capsule = {
-      id: Date.now(),
-      type: activeTab,
-      content: activeTab === "text" ? message : activeTab === "image" ? uploadedImage : "drawing",
-      unlockDate: selectedDate,
-      isPrivate,
-      createdAt: new Date(),
-      isLocked: true,
-    };
+    let content = "";
+    let fileUrl = null;
 
-    const existingCapsules = JSON.parse(localStorage.getItem("lockTheDay_capsules") || "[]");
-    existingCapsules.push(capsule);
-    localStorage.setItem("lockTheDay_capsules", JSON.stringify(existingCapsules));
+    if (activeTab === "text") {
+      content = message;
+    } else if (activeTab === "image") {
+      content = "Image capsule";
+      fileUrl = uploadedImage;
+    } else if (activeTab === "drawing") {
+      content = "Drawing capsule";
+    }
 
-    toast({
-      title: "🔒 Capsule Created!",
-      description: `Your memory has been locked until ${format(selectedDate, "PPP")}. You'll receive a notification when it's ready to open.`,
+    createCapsule.mutate({
+      title: title || null,
+      content,
+      content_type: activeTab as 'text' | 'image' | 'drawing',
+      unlock_date: selectedDate.toISOString(),
+      is_private: isPrivate,
+      is_locked: true,
+      file_url: fileUrl,
     });
 
     // Reset form
     setMessage("");
+    setTitle("");
     setUploadedImage(null);
     setSelectedDate(undefined);
     setActiveTab("text");
@@ -100,6 +116,19 @@ const CreateCapsule = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {/* Title */}
+                <div className="mb-6">
+                  <Label htmlFor="title" className="text-slate-700">Capsule Title (Optional)</Label>
+                  <Textarea
+                    id="title"
+                    placeholder="Give your capsule a name..."
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="mt-2 resize-none border-lavender-200 focus:border-lavender-400"
+                    rows={1}
+                  />
+                </div>
+
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList className="grid w-full grid-cols-3 mb-6">
                     <TabsTrigger value="text">Message</TabsTrigger>
@@ -239,11 +268,12 @@ const CreateCapsule = () => {
             {/* Create Button */}
             <Button 
               onClick={handleCreateCapsule}
+              disabled={!selectedDate || createCapsule.isPending}
               className="w-full bg-gradient-to-r from-lavender-500 to-skyblue-500 hover:from-lavender-600 hover:to-skyblue-600 text-white py-6 text-lg font-medium"
               size="lg"
             >
               <Lock className="w-5 h-5 mr-2" />
-              Lock My Capsule
+              {createCapsule.isPending ? 'Creating...' : 'Lock My Capsule'}
             </Button>
           </div>
         </div>

@@ -1,51 +1,37 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Lock, Unlock, Calendar, Star, Sparkles, Eye } from "lucide-react";
 import { format, isAfter } from "date-fns";
-
-interface Capsule {
-  id: number;
-  type: string;
-  content: string;
-  unlockDate: Date;
-  isPrivate: boolean;
-  createdAt: Date;
-  isLocked: boolean;
-}
+import { useCapsules } from "@/hooks/useCapsules";
 
 const Gallery = () => {
-  const [capsules, setCapsules] = useState<Capsule[]>([]);
+  const { data: capsules = [], isLoading } = useCapsules();
   const [filter, setFilter] = useState<"all" | "locked" | "unlocked">("all");
 
-  useEffect(() => {
-    const stored = localStorage.getItem("lockTheDay_capsules");
-    if (stored) {
-      const parsed = JSON.parse(stored).map((capsule: any) => ({
-        ...capsule,
-        unlockDate: new Date(capsule.unlockDate),
-        createdAt: new Date(capsule.createdAt),
-      }));
-      setCapsules(parsed);
-    }
-  }, []);
+  const isUnlocked = (unlockDate: string) => isAfter(new Date(), new Date(unlockDate));
 
-  const isUnlocked = (unlockDate: Date) => isAfter(new Date(), unlockDate);
+  // Only show public capsules in gallery
+  const publicCapsules = capsules.filter(capsule => !capsule.is_private);
 
-  const filteredCapsules = capsules.filter((capsule) => {
-    if (filter === "locked") return !isUnlocked(capsule.unlockDate);
-    if (filter === "unlocked") return isUnlocked(capsule.unlockDate);
+  const filteredCapsules = publicCapsules.filter((capsule) => {
+    if (filter === "locked") return !isUnlocked(capsule.unlock_date);
+    if (filter === "unlocked") return isUnlocked(capsule.unlock_date);
     return true;
   });
 
-  const handleViewCapsule = (capsule: Capsule) => {
-    if (isUnlocked(capsule.unlockDate)) {
-      // Show unlock animation and content
-      console.log("Opening capsule:", capsule);
-    }
-  };
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Lock className="w-8 h-8 text-lavender-500 animate-spin mx-auto mb-4" />
+          <p className="text-slate-600">Loading capsules...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
@@ -62,7 +48,7 @@ const Gallery = () => {
             Memory Gallery
           </h1>
           <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            Explore time capsules from around the world and rediscover your own memories when they unlock.
+            Explore public time capsules from around the world and rediscover memories when they unlock.
           </p>
         </div>
 
@@ -97,11 +83,11 @@ const Gallery = () => {
         {filteredCapsules.length === 0 ? (
           <div className="text-center py-16">
             <Lock className="w-16 h-16 text-lavender-300 mx-auto mb-4" />
-            <h3 className="font-serif text-2xl font-semibold text-slate-700 mb-2">No capsules found</h3>
+            <h3 className="font-serif text-2xl font-semibold text-slate-700 mb-2">No public capsules found</h3>
             <p className="text-slate-500 mb-6">
               {filter === "all" 
-                ? "You haven't created any capsules yet." 
-                : `No ${filter} capsules available.`}
+                ? "No public capsules have been created yet." 
+                : `No ${filter} public capsules available.`}
             </p>
             <Button asChild className="bg-gradient-to-r from-lavender-500 to-skyblue-500 hover:from-lavender-600 hover:to-skyblue-600">
               <a href="/create">Create Your First Capsule</a>
@@ -110,7 +96,7 @@ const Gallery = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCapsules.map((capsule) => {
-              const unlocked = isUnlocked(capsule.unlockDate);
+              const unlocked = isUnlocked(capsule.unlock_date);
               
               return (
                 <Card key={capsule.id} className="border-lavender-200 hover:shadow-lg transition-all duration-300 group">
@@ -122,9 +108,7 @@ const Gallery = () => {
                         ) : (
                           <Lock className="w-5 h-5 text-lavender-500" />
                         )}
-                        {capsule.type === "text" && "Message"}
-                        {capsule.type === "image" && "Photo"}
-                        {capsule.type === "drawing" && "Drawing"}
+                        {capsule.title || `${capsule.content_type.charAt(0).toUpperCase() + capsule.content_type.slice(1)} Capsule`}
                       </CardTitle>
                       <Badge 
                         variant={unlocked ? "default" : "secondary"}
@@ -140,17 +124,17 @@ const Gallery = () => {
                     <div className="relative">
                       {unlocked ? (
                         <div className="space-y-2">
-                          {capsule.type === "text" && (
+                          {capsule.content_type === "text" && (
                             <p className="text-slate-700 line-clamp-3">{capsule.content}</p>
                           )}
-                          {capsule.type === "image" && (
+                          {capsule.content_type === "image" && capsule.file_url && (
                             <img 
-                              src={capsule.content} 
+                              src={capsule.file_url} 
                               alt="Capsule content" 
                               className="w-full h-32 object-cover rounded-lg"
                             />
                           )}
-                          {capsule.type === "drawing" && (
+                          {capsule.content_type === "drawing" && (
                             <div className="w-full h-32 bg-gradient-to-br from-lavender-50 to-peach-50 rounded-lg flex items-center justify-center">
                               <Star className="w-8 h-8 text-lavender-400" />
                             </div>
@@ -170,17 +154,16 @@ const Gallery = () => {
                     <div className="space-y-2 text-sm text-slate-600">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4" />
-                        <span>Unlocks: {format(capsule.unlockDate, "PPP")}</span>
+                        <span>Unlocks: {format(new Date(capsule.unlock_date), "PPP")}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Star className="w-4 h-4" />
-                        <span>Created: {format(capsule.createdAt, "PPP")}</span>
+                        <span>Created: {format(new Date(capsule.created_at), "PPP")}</span>
                       </div>
                     </div>
 
                     {/* Action Button */}
                     <Button 
-                      onClick={() => handleViewCapsule(capsule)}
                       disabled={!unlocked}
                       className={`w-full ${
                         unlocked 
