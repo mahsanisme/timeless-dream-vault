@@ -8,12 +8,15 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { format } from "date-fns";
-import { Calendar as CalendarIcon, Lock, Upload, Star, Sparkles } from "lucide-react";
+import { Calendar as CalendarIcon, Lock, Upload, Star, Sparkles, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import DrawingCanvas from "@/components/DrawingCanvas";
 import { useCreateCapsule } from "@/hooks/useCapsules";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 const CreateCapsule = () => {
   const [selectedDate, setSelectedDate] = useState<Date>();
@@ -22,37 +25,82 @@ const CreateCapsule = () => {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("text");
   const [title, setTitle] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
   const createCapsule = useCreateCapsule();
+  const { user } = useAuth();
+  const { toast } = useToast();
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+    if (!user) {
+      toast({
+        title: 'Authentication required',
+        description: 'Please sign in to upload images.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
+    setIsUploading(true);
+
+    try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+      console.log('Uploading file:', fileName);
 
       const { error: uploadError } = await supabase.storage
         .from('capsule-files')
         .upload(fileName, file);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
 
       const { data } = supabase.storage
         .from('capsule-files')
         .getPublicUrl(fileName);
 
       setUploadedImage(data.publicUrl);
-    } catch (error) {
+      console.log('File uploaded successfully:', data.publicUrl);
+
+      toast({
+        title: 'Image uploaded',
+        description: 'Your image has been uploaded successfully.',
+      });
+    } catch (error: any) {
       console.error('Error uploading file:', error);
+      toast({
+        title: 'Upload failed',
+        description: error.message || 'Failed to upload image. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
 
   const handleCreateCapsule = () => {
+    console.log('Creating capsule...');
+    
+    if (!user) {
+      toast({
+        title: 'Authentication required',
+        description: 'Please sign in to create a capsule.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!selectedDate) {
+      toast({
+        title: 'Date required',
+        description: 'Please select when your capsule should unlock.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -60,31 +108,72 @@ const CreateCapsule = () => {
     let fileUrl = null;
 
     if (activeTab === "text") {
+      if (!message.trim()) {
+        toast({
+          title: 'Content required',
+          description: 'Please write a message for your capsule.',
+          variant: 'destructive',
+        });
+        return;
+      }
       content = message;
     } else if (activeTab === "image") {
+      if (!uploadedImage) {
+        toast({
+          title: 'Image required',
+          description: 'Please upload an image for your capsule.',
+          variant: 'destructive',
+        });
+        return;
+      }
       content = "Image capsule";
       fileUrl = uploadedImage;
     } else if (activeTab === "drawing") {
       content = "Drawing capsule";
+      // TODO: Handle drawing data when DrawingCanvas is properly implemented
     }
 
-    createCapsule.mutate({
-      title: title || null,
+    const capsuleData = {
+      title: title.trim() || null,
       content,
       content_type: activeTab as 'text' | 'image' | 'drawing',
       unlock_date: selectedDate.toISOString(),
       is_private: isPrivate,
       is_locked: true,
       file_url: fileUrl,
-    });
+    };
 
-    // Reset form
+    console.log('Capsule data:', capsuleData);
+    createCapsule.mutate(capsuleData);
+  };
+
+  const resetForm = () => {
     setMessage("");
     setTitle("");
     setUploadedImage(null);
     setSelectedDate(undefined);
     setActiveTab("text");
+    setIsPrivate(false);
   };
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <Card className="w-full max-w-md border-lavender-200">
+          <CardHeader className="text-center">
+            <Lock className="w-12 h-12 text-lavender-500 mx-auto mb-4" />
+            <CardTitle>Authentication Required</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-slate-600">You need to be signed in to create a time capsule.</p>
+            <Button asChild className="w-full bg-gradient-to-r from-lavender-500 to-skyblue-500 hover:from-lavender-600 hover:to-skyblue-600">
+              <a href="/auth">Sign In</a>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
@@ -104,6 +193,15 @@ const CreateCapsule = () => {
             Capture this moment and send it to your future self. What would you like to remember?
           </p>
         </div>
+
+        {createCapsule.error && (
+          <Alert className="mb-6 border-red-200 bg-red-50">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="text-red-800">
+              {createCapsule.error.message || 'Failed to create capsule. Please try again.'}
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Content Creation */}
@@ -157,6 +255,7 @@ const CreateCapsule = () => {
                             variant="outline"
                             onClick={() => setUploadedImage(null)}
                             className="border-lavender-300 text-lavender-700"
+                            disabled={isUploading}
                           >
                             Remove Photo
                           </Button>
@@ -164,17 +263,25 @@ const CreateCapsule = () => {
                       ) : (
                         <div>
                           <Upload className="w-12 h-12 text-lavender-400 mx-auto mb-4" />
-                          <p className="text-slate-600 mb-4">Click to upload or drag and drop</p>
+                          <p className="text-slate-600 mb-4">
+                            {isUploading ? 'Uploading...' : 'Click to upload or drag and drop'}
+                          </p>
                           <input
                             type="file"
                             accept="image/*"
                             onChange={handleImageUpload}
                             className="hidden"
                             id="image-upload"
+                            disabled={isUploading}
                           />
-                          <Button asChild variant="outline" className="border-lavender-300 text-lavender-700">
+                          <Button 
+                            asChild 
+                            variant="outline" 
+                            className="border-lavender-300 text-lavender-700"
+                            disabled={isUploading}
+                          >
                             <label htmlFor="image-upload" className="cursor-pointer">
-                              Choose Photo
+                              {isUploading ? 'Uploading...' : 'Choose Photo'}
                             </label>
                           </Button>
                         </div>
@@ -184,7 +291,9 @@ const CreateCapsule = () => {
 
                   <TabsContent value="drawing" className="space-y-4">
                     <Label className="text-slate-700">Create a Drawing</Label>
-                    <DrawingCanvas />
+                    <div className="border border-lavender-200 rounded-lg p-4">
+                      <DrawingCanvas />
+                    </div>
                   </TabsContent>
                 </Tabs>
               </CardContent>
@@ -265,16 +374,27 @@ const CreateCapsule = () => {
               </CardContent>
             </Card>
 
-            {/* Create Button */}
-            <Button 
-              onClick={handleCreateCapsule}
-              disabled={!selectedDate || createCapsule.isPending}
-              className="w-full bg-gradient-to-r from-lavender-500 to-skyblue-500 hover:from-lavender-600 hover:to-skyblue-600 text-white py-6 text-lg font-medium"
-              size="lg"
-            >
-              <Lock className="w-5 h-5 mr-2" />
-              {createCapsule.isPending ? 'Creating...' : 'Lock My Capsule'}
-            </Button>
+            {/* Action Buttons */}
+            <div className="space-y-4">
+              <Button 
+                onClick={handleCreateCapsule}
+                disabled={!selectedDate || createCapsule.isPending || isUploading}
+                className="w-full bg-gradient-to-r from-lavender-500 to-skyblue-500 hover:from-lavender-600 hover:to-skyblue-600 text-white py-6 text-lg font-medium"
+                size="lg"
+              >
+                <Lock className="w-5 h-5 mr-2" />
+                {createCapsule.isPending ? 'Creating...' : 'Lock My Capsule'}
+              </Button>
+
+              <Button 
+                onClick={resetForm}
+                variant="outline"
+                className="w-full border-lavender-200 text-lavender-700"
+                disabled={createCapsule.isPending}
+              >
+                Reset Form
+              </Button>
+            </div>
           </div>
         </div>
       </div>
