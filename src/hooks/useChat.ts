@@ -30,13 +30,18 @@ export const useMessages = (friendId: string) => {
         .from('messages')
         .select(`
           *,
-          sender_profile:profiles!messages_sender_id_fkey(id, email, full_name, avatar_url)
+          sender_profile:sender_id(id, email, full_name, avatar_url)
         `)
         .or(`and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      return data as Message[];
+      
+      // Transform the data to match our Message interface
+      return data.map(msg => ({
+        ...msg,
+        sender_profile: Array.isArray(msg.sender_profile) ? msg.sender_profile[0] : msg.sender_profile
+      })) as Message[];
     },
     enabled: !!friendId,
   });

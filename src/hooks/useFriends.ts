@@ -36,13 +36,18 @@ export const useFriends = () => {
         .from('friends')
         .select(`
           *,
-          friend_profile:profiles!friends_friend_id_fkey(id, email, full_name, avatar_url)
+          friend_profile:friend_id(id, email, full_name, avatar_url)
         `)
         .eq('user_id', user.id)
         .eq('status', 'accepted');
 
       if (error) throw error;
-      return data as Friend[];
+      
+      // Transform the data to match our Friend interface
+      return data.map(friend => ({
+        ...friend,
+        friend_profile: Array.isArray(friend.friend_profile) ? friend.friend_profile[0] : friend.friend_profile
+      })) as Friend[];
     },
   });
 };
@@ -58,13 +63,18 @@ export const useFriendRequests = () => {
         .from('friends')
         .select(`
           *,
-          friend_profile:profiles!friends_user_id_fkey(id, email, full_name, avatar_url)
+          friend_profile:user_id(id, email, full_name, avatar_url)
         `)
         .eq('friend_id', user.id)
         .eq('status', 'pending');
 
       if (error) throw error;
-      return data as Friend[];
+      
+      // Transform the data to match our Friend interface
+      return data.map(request => ({
+        ...request,
+        friend_profile: Array.isArray(request.friend_profile) ? request.friend_profile[0] : request.friend_profile
+      })) as Friend[];
     },
   });
 };
