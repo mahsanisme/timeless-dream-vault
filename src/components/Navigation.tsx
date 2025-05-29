@@ -1,248 +1,185 @@
 
-import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Menu, Lock, Star, User, LogOut, Settings, Plus } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Menu, Lock, User, LogOut, Shield, Settings } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import ThemeToggle from './ThemeToggle';
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const location = useLocation();
-  const { user, signOut, isAdmin } = useAuth();
-
-  const navItems = [
-    { href: "/", label: "Home" },
-    { href: "/gallery", label: "Gallery" },
-    { href: "/about", label: "About" },
-  ];
-
-  const authenticatedNavItems = [
-    { href: "/dashboard", label: "Dashboard" },
-    { href: "/create", label: "Create Capsule" },
-  ];
-
-  const isActive = (path: string) => location.pathname === path;
+  const { user, signOut, isAdmin, isSuperAdmin } = useAuth();
+  const navigate = useNavigate();
 
   const handleSignOut = async () => {
     await signOut();
+    navigate('/');
     setIsOpen(false);
   };
 
+  const navigationItems = [
+    { href: '/gallery', label: 'Gallery' },
+    { href: '/about', label: 'About' },
+  ];
+
+  if (user) {
+    navigationItems.unshift({ href: '/dashboard', label: 'Dashboard' });
+    navigationItems.unshift({ href: '/create', label: 'Create Capsule' });
+  }
+
   return (
-    <nav className="sticky top-0 z-50 w-full border-b border-lavender-200/50 bg-white/80 backdrop-blur-md">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
+    <nav className="sticky top-0 z-50 w-full border-b border-lavender-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2 text-lavender-700 hover:text-lavender-800 transition-colors">
-            <div className="relative">
-              <Lock className="h-6 w-6" />
-              <Star className="h-3 w-3 absolute -top-1 -right-1 text-peach-500 animate-sparkle" />
-            </div>
-            <span className="font-serif text-xl font-semibold">Lock The Day</span>
+          <Link to="/" className="flex items-center gap-2">
+            <Lock className="w-8 h-8 text-lavender-500" />
+            <span className="font-serif text-xl font-bold text-slate-800 dark:text-slate-200">
+              Lock The Day
+            </span>
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8">
-            {navItems.map((item) => (
+          <div className="hidden md:flex items-center gap-6">
+            {navigationItems.map((item) => (
               <Link
                 key={item.href}
                 to={item.href}
-                className={`text-sm font-medium transition-colors hover:text-lavender-700 ${
-                  isActive(item.href) 
-                    ? "text-lavender-700 border-b-2 border-lavender-300" 
-                    : "text-slate-600"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
-            
-            {user && authenticatedNavItems.map((item) => (
-              <Link
-                key={item.href}
-                to={item.href}
-                className={`text-sm font-medium transition-colors hover:text-lavender-700 ${
-                  isActive(item.href) 
-                    ? "text-lavender-700 border-b-2 border-lavender-300" 
-                    : "text-slate-600"
-                }`}
+                className="text-slate-600 dark:text-slate-300 hover:text-lavender-600 dark:hover:text-lavender-400 font-medium transition-colors"
               >
                 {item.label}
               </Link>
             ))}
 
+            <ThemeToggle />
+
             {user ? (
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center gap-3">
+                {isSuperAdmin && (
+                  <Button 
+                    asChild 
+                    variant="outline" 
+                    size="sm"
+                    className="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+                  >
+                    <Link to="/superadmin">
+                      <Shield className="w-4 h-4 mr-2" />
+                      Super Admin
+                    </Link>
+                  </Button>
+                )}
+                {isAdmin && !isSuperAdmin && (
+                  <Button 
+                    asChild 
+                    variant="outline" 
+                    size="sm"
+                    className="border-orange-200 text-orange-600 hover:bg-orange-50 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-950"
+                  >
+                    <Link to="/admin">
+                      <Settings className="w-4 h-4 mr-2" />
+                      Admin
+                    </Link>
+                  </Button>
+                )}
+                <span className="text-sm text-slate-600 dark:text-slate-400">
+                  {user.user_metadata?.full_name || user.email}
+                </span>
                 <Button 
-                  asChild 
+                  onClick={handleSignOut}
+                  variant="outline" 
                   size="sm"
-                  className="bg-gradient-to-r from-lavender-500 to-skyblue-500 hover:from-lavender-600 hover:to-skyblue-600 text-white border-0"
+                  className="border-lavender-200 dark:border-slate-600"
                 >
-                  <Link to="/create">
-                    <Plus className="w-4 h-4 mr-2" />
-                    New Capsule
-                  </Link>
+                  <LogOut className="w-4 h-4" />
                 </Button>
-                
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={user.user_metadata?.avatar_url} alt={user.user_metadata?.full_name} />
-                        <AvatarFallback>
-                          {user.user_metadata?.full_name?.charAt(0) || user.email?.charAt(0) || 'U'}
-                        </AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56" align="end" forceMount>
-                    <div className="flex flex-col space-y-1 p-2">
-                      <p className="text-sm font-medium leading-none">
-                        {user.user_metadata?.full_name || 'User'}
-                      </p>
-                      <p className="text-xs leading-none text-muted-foreground">
-                        {user.email}
-                      </p>
-                    </div>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link to="/dashboard" className="flex items-center">
-                        <User className="mr-2 h-4 w-4" />
-                        <span>Dashboard</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    {isAdmin && (
-                      <DropdownMenuItem asChild>
-                        <Link to="/admin" className="flex items-center">
-                          <Settings className="mr-2 h-4 w-4" />
-                          <span>Admin Panel</span>
-                        </Link>
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleSignOut} className="flex items-center">
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Sign out</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
               </div>
             ) : (
-              <div className="flex items-center space-x-4">
-                <Button variant="ghost" asChild>
-                  <Link to="/auth">Sign In</Link>
-                </Button>
-                <Button 
-                  asChild 
-                  className="bg-gradient-to-r from-lavender-500 to-skyblue-500 hover:from-lavender-600 hover:to-skyblue-600 text-white border-0"
-                >
-                  <Link to="/auth">Get Started</Link>
-                </Button>
-              </div>
+              <Button 
+                asChild 
+                className="bg-gradient-to-r from-lavender-500 to-skyblue-500 hover:from-lavender-600 hover:to-skyblue-600"
+              >
+                <Link to="/auth">
+                  <User className="w-4 h-4 mr-2" />
+                  Sign In
+                </Link>
+              </Button>
             )}
           </div>
 
           {/* Mobile Navigation */}
-          <div className="md:hidden">
+          <div className="md:hidden flex items-center gap-2">
+            <ThemeToggle />
             <Sheet open={isOpen} onOpenChange={setIsOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <Menu className="h-5 w-5" />
+                <Button variant="outline" size="sm">
+                  <Menu className="w-4 h-4" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-72 bg-white">
-                <div className="flex flex-col space-y-4 mt-8">
-                  {user && (
-                    <div className="flex items-center space-x-3 pb-4 border-b border-lavender-200">
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage src={user.user_metadata?.avatar_url} alt={user.user_metadata?.full_name} />
-                        <AvatarFallback>
-                          {user.user_metadata?.full_name?.charAt(0) || user.email?.charAt(0) || 'U'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex flex-col">
-                        <p className="text-sm font-medium">
-                          {user.user_metadata?.full_name || 'User'}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {user.email}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {navItems.map((item) => (
+              <SheetContent side="right" className="dark:bg-slate-900 dark:border-slate-700">
+                <div className="flex flex-col gap-4 mt-8">
+                  {navigationItems.map((item) => (
                     <Link
                       key={item.href}
                       to={item.href}
                       onClick={() => setIsOpen(false)}
-                      className={`text-base font-medium transition-colors hover:text-lavender-700 py-2 ${
-                        isActive(item.href) 
-                          ? "text-lavender-700 border-l-2 border-lavender-300 pl-3" 
-                          : "text-slate-600"
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-
-                  {user && authenticatedNavItems.map((item) => (
-                    <Link
-                      key={item.href}
-                      to={item.href}
-                      onClick={() => setIsOpen(false)}
-                      className={`text-base font-medium transition-colors hover:text-lavender-700 py-2 ${
-                        isActive(item.href) 
-                          ? "text-lavender-700 border-l-2 border-lavender-300 pl-3" 
-                          : "text-slate-600"
-                      }`}
+                      className="text-slate-600 dark:text-slate-300 hover:text-lavender-600 dark:hover:text-lavender-400 font-medium text-lg"
                     >
                       {item.label}
                     </Link>
                   ))}
 
                   {user ? (
-                    <div className="pt-4 border-t border-lavender-200 space-y-2">
-                      {isAdmin && (
-                        <Link
-                          to="/admin"
+                    <div className="flex flex-col gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                      {isSuperAdmin && (
+                        <Button 
+                          asChild 
+                          variant="outline" 
+                          className="justify-start border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
                           onClick={() => setIsOpen(false)}
-                          className="flex items-center text-base font-medium text-slate-600 hover:text-lavender-700 py-2"
                         >
-                          <Settings className="mr-2 h-4 w-4" />
-                          Admin Panel
-                        </Link>
+                          <Link to="/superadmin">
+                            <Shield className="w-4 h-4 mr-2" />
+                            Super Admin
+                          </Link>
+                        </Button>
                       )}
+                      {isAdmin && !isSuperAdmin && (
+                        <Button 
+                          asChild 
+                          variant="outline" 
+                          className="justify-start border-orange-200 text-orange-600 hover:bg-orange-50 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-950"
+                          onClick={() => setIsOpen(false)}
+                        >
+                          <Link to="/admin">
+                            <Settings className="w-4 h-4 mr-2" />
+                            Admin
+                          </Link>
+                        </Button>
+                      )}
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                        {user.user_metadata?.full_name || user.email}
+                      </p>
                       <Button 
-                        variant="ghost" 
                         onClick={handleSignOut}
-                        className="w-full justify-start p-2"
+                        variant="outline"
+                        className="justify-start border-lavender-200 dark:border-slate-600"
                       >
-                        <LogOut className="mr-2 h-4 w-4" />
-                        Sign out
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Sign Out
                       </Button>
                     </div>
                   ) : (
-                    <div className="pt-4 space-y-2">
-                      <Button 
-                        asChild 
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => setIsOpen(false)}
-                      >
-                        <Link to="/auth">Sign In</Link>
-                      </Button>
-                      <Button 
-                        asChild 
-                        className="w-full bg-gradient-to-r from-lavender-500 to-skyblue-500 hover:from-lavender-600 hover:to-skyblue-600 text-white"
-                        onClick={() => setIsOpen(false)}
-                      >
-                        <Link to="/auth">Get Started</Link>
-                      </Button>
-                    </div>
+                    <Button 
+                      asChild 
+                      className="bg-gradient-to-r from-lavender-500 to-skyblue-500 hover:from-lavender-600 hover:to-skyblue-600 mt-4"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      <Link to="/auth">
+                        <User className="w-4 h-4 mr-2" />
+                        Sign In
+                      </Link>
+                    </Button>
                   )}
                 </div>
               </SheetContent>

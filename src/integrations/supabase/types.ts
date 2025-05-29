@@ -9,16 +9,153 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      capsules: {
+        Row: {
+          content: string | null
+          content_type: string
+          created_at: string | null
+          file_url: string | null
+          id: string
+          is_locked: boolean | null
+          is_private: boolean | null
+          share_token: string | null
+          title: string | null
+          unlock_date: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          content?: string | null
+          content_type: string
+          created_at?: string | null
+          file_url?: string | null
+          id?: string
+          is_locked?: boolean | null
+          is_private?: boolean | null
+          share_token?: string | null
+          title?: string | null
+          unlock_date: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          content?: string | null
+          content_type?: string
+          created_at?: string | null
+          file_url?: string | null
+          id?: string
+          is_locked?: boolean | null
+          is_private?: boolean | null
+          share_token?: string | null
+          title?: string | null
+          unlock_date?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          email: string | null
+          full_name: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      shared_capsules: {
+        Row: {
+          capsule_id: string
+          id: string
+          recipient_email: string | null
+          shared_at: string | null
+          shared_by: string
+          shared_via: string | null
+        }
+        Insert: {
+          capsule_id: string
+          id?: string
+          recipient_email?: string | null
+          shared_at?: string | null
+          shared_by: string
+          shared_via?: string | null
+        }
+        Update: {
+          capsule_id?: string
+          id?: string
+          recipient_email?: string | null
+          shared_at?: string | null
+          shared_by?: string
+          shared_via?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shared_capsules_capsule_id_fkey"
+            columns: ["capsule_id"]
+            isOneToOne: false
+            referencedRelation: "capsules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["user_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _user_id: string
+          _role: Database["public"]["Enums"]["user_role"]
+        }
+        Returns: boolean
+      }
+      is_admin: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      user_role: "user" | "admin" | "superadmin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -133,6 +270,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      user_role: ["user", "admin", "superadmin"],
+    },
   },
 } as const

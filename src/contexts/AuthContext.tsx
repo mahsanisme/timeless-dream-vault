@@ -11,6 +11,8 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName: string) => Promise<{ error?: any }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
+  userRole: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,26 +30,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.id);
         setSession(session);
         setUser(session?.user ?? null);
         
-        // Check if user is admin
+        // Check user roles
         if (session?.user) {
           setTimeout(async () => {
-            const { data } = await supabase
-              .from('admin_users')
-              .select('*')
-              .eq('user_id', session.user.id)
-              .single();
-            setIsAdmin(!!data);
+            try {
+              const { data: roles } = await supabase
+                .from('user_roles')
+                .select('role')
+                .eq('user_id', session.user.id);
+              
+              console.log('User roles:', roles);
+              
+              if (roles && roles.length > 0) {
+                const userRoles = roles.map(r => r.role);
+                setUserRole(userRoles[0]);
+                setIsAdmin(userRoles.includes('admin') || userRoles.includes('superadmin'));
+                setIsSuperAdmin(userRoles.includes('superadmin'));
+              } else {
+                setUserRole('user');
+                setIsAdmin(false);
+                setIsSuperAdmin(false);
+              }
+            } catch (error) {
+              console.error('Error fetching user roles:', error);
+              setUserRole('user');
+              setIsAdmin(false);
+              setIsSuperAdmin(false);
+            }
           }, 0);
         } else {
+          setUserRole(null);
           setIsAdmin(false);
+          setIsSuperAdmin(false);
         }
         
         setLoading(false);
@@ -56,6 +81,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Initial session:', session?.user?.id);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -92,7 +118,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       signIn,
       signUp,
       signOut,
-      isAdmin
+      isAdmin,
+      isSuperAdmin,
+      userRole
     }}>
       {children}
     </AuthContext.Provider>

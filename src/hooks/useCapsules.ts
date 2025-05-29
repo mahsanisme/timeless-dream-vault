@@ -60,8 +60,14 @@ export const useCreateCapsule = () => {
       const { data, error } = await supabase
         .from('capsules')
         .insert({
-          ...capsule,
           user_id: user.id,
+          title: capsule.title,
+          content: capsule.content,
+          content_type: capsule.content_type,
+          unlock_date: capsule.unlock_date,
+          is_private: capsule.is_private,
+          is_locked: capsule.is_locked,
+          file_url: capsule.file_url,
         })
         .select()
         .single();
@@ -83,7 +89,6 @@ export const useCreateCapsule = () => {
         description: 'Your memory has been locked and will unlock on the specified date.',
       });
       
-      // Navigate to dashboard after successful creation
       navigate('/dashboard');
     },
     onError: (error: any) => {

@@ -19,32 +19,68 @@ import {
   Settings, 
   Mail,
   Ban,
-  Search
+  Search,
+  UserPlus,
+  UserMinus
 } from "lucide-react";
 import { format, isAfter } from "date-fns";
 import { useCapsules } from "@/hooks/useCapsules";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
-const AdminDashboard = () => {
+const SuperAdminDashboard = () => {
   const { data: capsules = [] } = useCapsules();
   const [filter, setFilter] = useState<"all" | "locked" | "unlocked" | "flagged">("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [adSettings, setAdSettings] = useState({
-    enabled: true,
-    frequency: "medium",
-    placement: "bottom"
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Get user stats and users
+  const { data: userStats } = useQuery({
+    queryKey: ['superadmin-stats'],
+    queryFn: async () => {
+      const { data: profiles, count } = await supabase
+        .from('profiles')
+        .select('*, user_roles(role)', { count: 'exact' });
+      
+      return { 
+        userCount: count || 0,
+        users: profiles || []
+      };
+    },
   });
 
-  // Get user count
-  const { data: userStats } = useQuery({
-    queryKey: ['admin-stats'],
-    queryFn: async () => {
-      const { count } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true });
+  // Update user role mutation
+  const updateUserRole = useMutation({
+    mutationFn: async ({ userId, newRole }: { userId: string, newRole: string }) => {
+      // First delete existing role
+      await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId);
       
-      return { userCount: count || 0 };
+      // Then insert new role
+      const { error } = await supabase
+        .from('user_roles')
+        .insert({ user_id: userId, role: newRole });
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Role Updated",
+        description: "User role has been updated successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['superadmin-stats'] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to update user role.",
+        variant: "destructive",
+      });
+      console.error('Role update error:', error);
     },
   });
 
@@ -76,60 +112,148 @@ const AdminDashboard = () => {
     <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8 bg-slate-50 dark:bg-slate-900">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="font-serif text-3xl font-bold text-slate-800 mb-2 flex items-center gap-3">
+          <h1 className="font-serif text-3xl font-bold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-3">
             <Shield className="w-8 h-8 text-lavender-500" />
-            Admin Dashboard
+            Super Admin Dashboard
           </h1>
-          <p className="text-slate-600">Manage capsules, users, and platform settings</p>
+          <p className="text-slate-600 dark:text-slate-400">Manage users, capsules, and platform settings</p>
         </div>
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-slate-800">{stats.totalCapsules}</div>
-              <div className="text-sm text-slate-600">Total Capsules</div>
+              <div className="text-2xl font-bold text-slate-800 dark:text-slate-200">{stats.totalCapsules}</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">Total Capsules</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold text-lavender-600">{stats.lockedCapsules}</div>
-              <div className="text-sm text-slate-600">Locked</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">Locked</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold text-peach-600">{stats.unlockedCapsules}</div>
-              <div className="text-sm text-slate-600">Unlocked</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">Unlocked</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold text-red-600">{stats.flaggedCapsules}</div>
-              <div className="text-sm text-slate-600">Flagged</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">Flagged</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold text-skyblue-600">{stats.publicCapsules}</div>
-              <div className="text-sm text-slate-600">Public</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">Public</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-slate-600">{stats.privateCapsules}</div>
-              <div className="text-sm text-slate-600">Private</div>
+              <div className="text-2xl font-bold text-slate-600 dark:text-slate-400">{stats.privateCapsules}</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">Private</div>
             </CardContent>
           </Card>
         </div>
 
-        <Tabs defaultValue="capsules" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="capsules">Capsule Management</TabsTrigger>
+        <Tabs defaultValue="users" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4 dark:bg-slate-800">
             <TabsTrigger value="users">User Management</TabsTrigger>
+            <TabsTrigger value="capsules">Capsule Management</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="users" className="space-y-6">
+            <Card className="dark:bg-slate-800 dark:border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 dark:text-slate-200">
+                  <Users className="w-5 h-5" />
+                  User Management
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <Card className="border-lavender-200 dark:bg-slate-700 dark:border-slate-600">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-slate-800 dark:text-slate-200">{userStats?.userCount || 0}</div>
+                      <div className="text-sm text-slate-600 dark:text-slate-400">Total Users</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-lavender-200 dark:bg-slate-700 dark:border-slate-600">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-green-600">
+                        {userStats?.users?.filter(u => u.user_roles?.[0]?.role === 'admin').length || 0}
+                      </div>
+                      <div className="text-sm text-slate-600 dark:text-slate-400">Admin Users</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-lavender-200 dark:bg-slate-700 dark:border-slate-600">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {userStats?.users?.filter(u => u.user_roles?.[0]?.role === 'user').length || 0}
+                      </div>
+                      <div className="text-sm text-slate-600 dark:text-slate-400">Regular Users</div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Users Table */}
+                <div className="border rounded-lg overflow-hidden dark:border-slate-600">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="dark:border-slate-600">
+                        <TableHead className="dark:text-slate-300">Name</TableHead>
+                        <TableHead className="dark:text-slate-300">Email</TableHead>
+                        <TableHead className="dark:text-slate-300">Role</TableHead>
+                        <TableHead className="dark:text-slate-300">Created</TableHead>
+                        <TableHead className="dark:text-slate-300">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {userStats?.users?.map((user) => (
+                        <TableRow key={user.id} className="dark:border-slate-600">
+                          <TableCell className="dark:text-slate-300">{user.full_name || 'N/A'}</TableCell>
+                          <TableCell className="dark:text-slate-300">{user.email}</TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant={user.user_roles?.[0]?.role === 'admin' ? "default" : "secondary"}
+                              className={user.user_roles?.[0]?.role === 'admin' ? "bg-green-500" : ""}
+                            >
+                              {user.user_roles?.[0]?.role || 'user'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm dark:text-slate-300">
+                            {format(new Date(user.created_at), "MMM dd, yyyy")}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Select
+                                value={user.user_roles?.[0]?.role || 'user'}
+                                onValueChange={(newRole) => updateUserRole.mutate({ userId: user.id, newRole })}
+                              >
+                                <SelectTrigger className="w-32">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="user">User</SelectItem>
+                                  <SelectItem value="admin">Admin</SelectItem>
+                                  <SelectItem value="superadmin">Super Admin</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="capsules" className="space-y-6">
             <Card>
@@ -242,39 +366,6 @@ const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="users" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="w-5 h-5" />
-                  User Management
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card className="border-lavender-200">
-                    <CardContent className="p-4 text-center">
-                      <div className="text-2xl font-bold text-slate-800">{userStats?.userCount || 0}</div>
-                      <div className="text-sm text-slate-600">Total Users</div>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-lavender-200">
-                    <CardContent className="p-4 text-center">
-                      <div className="text-2xl font-bold text-green-600">0</div>
-                      <div className="text-sm text-slate-600">Premium Users</div>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-lavender-200">
-                    <CardContent className="p-4 text-center">
-                      <div className="text-2xl font-bold text-blue-600">100%</div>
-                      <div className="text-sm text-slate-600">Active Rate</div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
           <TabsContent value="analytics" className="space-y-6">
             <Card>
               <CardHeader>
@@ -377,9 +468,9 @@ const AdminDashboard = () => {
                         <p className="text-sm text-slate-600">Show banner ads to free users</p>
                       </div>
                       <Switch 
-                        checked={adSettings.enabled}
+                        checked={false}
                         onCheckedChange={(checked) => 
-                          setAdSettings(prev => ({ ...prev, enabled: checked }))
+                          console.log(checked)
                         }
                       />
                     </div>
@@ -388,9 +479,9 @@ const AdminDashboard = () => {
                       <div>
                         <Label>Ad Frequency</Label>
                         <Select 
-                          value={adSettings.frequency} 
+                          value={"medium"} 
                           onValueChange={(value) => 
-                            setAdSettings(prev => ({ ...prev, frequency: value }))
+                            console.log(value)
                           }
                         >
                           <SelectTrigger>
@@ -407,9 +498,9 @@ const AdminDashboard = () => {
                       <div>
                         <Label>Ad Placement</Label>
                         <Select 
-                          value={adSettings.placement} 
+                          value={"bottom"} 
                           onValueChange={(value) => 
-                            setAdSettings(prev => ({ ...prev, placement: value }))
+                            console.log(value)
                           }
                         >
                           <SelectTrigger>
@@ -434,4 +525,4 @@ const AdminDashboard = () => {
   );
 };
 
-export default AdminDashboard;
+export default SuperAdminDashboard;
